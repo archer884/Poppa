@@ -5,4 +5,9 @@
     <TargetFramework>netcoreapp2.0</TargetFramework>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="1.50.5" />
+    <PackageReference Include="NEST" Version="6.1.0" />
+  </ItemGroup>
+
 </Project>
