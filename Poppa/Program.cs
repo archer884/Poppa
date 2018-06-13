@@ -32,8 +32,13 @@ namespace Poppa
             //    Console.WriteLine(result.Items.Count);
             //}
 
+            if (args.Length != 1)
+            {
+                throw new ArgumentException("What do you want to search for?");
+            }
+
             var count = 0;
-            foreach (var doc in QueryByContent(client, "prince"))
+            foreach (var doc in QueryByContent(client, args[0]))
             {
                 Console.WriteLine($"{doc.Index}: {doc.Content}");
                 count += 1;
