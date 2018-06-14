@@ -56,6 +56,7 @@ namespace Poppa
                     .Query(q => q.Term(t => t.Content, content));
             });
 
+            Console.WriteLine($"Returning {initialResult.Total} results.")
             foreach (var doc in initialResult.Hits.Select(hit => hit.Source))
             {
                 yield return doc;
