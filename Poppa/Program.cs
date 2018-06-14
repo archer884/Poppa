@@ -9,7 +9,9 @@ namespace Poppa
 {
     class Program
     {
+        const string DbConnectionString = "Server=(LocalDb)\\MSSQLLocalDB;Database=Scratch";
         const string IndexName = "text_index";
+        const string TextQuery = "select * from [Text]";
 
         class Text
         {
@@ -20,39 +22,74 @@ namespace Poppa
             public string Content { get; set; }
         }
 
+        enum Mode
+        {
+            Invalid,
+            Populate,
+            Query,
+            Update,
+        }
+
         static void Main(string[] args)
         {
             var serverAddress = new Uri("http://localhost:9200");
             var settings = new ConnectionSettings(serverAddress);
             var client = new ElasticClient(settings);
 
-            // Uncomment to repopulate elasticsearch.
-            //using (var connection = new SqlConnection("Server=(LocalDb)\\MSSQLLocalDB;Database=Scratch"))
-            //{
-            //    var texts = connection.Query<Text>("select * from [Text]");
-            //    var result = client.Bulk(create => create
-            //        .Index(IndexName)
-            //        .CreateMany(texts, (op, text) => op.Id(text.Id)));
+            switch (GetMode(args))
+            {
+                case Mode.Invalid:
+                    Console.WriteLine("Error: please select a valid mode");
+                    return;
 
-            //    Console.WriteLine(result.Items.Count);
-            //}
+                case Mode.Populate:
+                    Console.WriteLine("Populate Elasticsearch");
+                    Console.WriteLine($"Added {Populate(client)} items.");
+                    return;
 
-            // Uncomment to perform a search.
-            //if (args.Length != 1)
-            //{
-            //    throw new ArgumentException("Caller must provide one search term.");
-            //}
+                case Mode.Query:
+                    Console.WriteLine($"Query Elasticsearch: {args[1]}");
+                    var count = 0;
+                    foreach (var doc in QueryByContent(client, args[1]))
+                    {
+                        Console.WriteLine($"{doc.Source.Index}: {doc.Source.Content}");
+                        count += 1;
+                    }
+                    Console.WriteLine($"Total result count: {count}");
+                    return;
 
-            //var count = 0;
-            //foreach (var doc in QueryByContent(client, args[0]))
-            //{
-            //    if (doc.Id != doc.Source.Id.ToString())
-            //        throw new Exception("Id mismatch");
+                case Mode.Update:
+                    Console.WriteLine("Update Elasticsearch");
+                    using (var connection = new SqlConnection(DbConnectionString))
+                    {
+                        var texts = connection.Query<Text>(TextQuery).Select(text => new Text
+                        {
+                            Id = text.Id,
+                            Index = text.Index,
+                            Length = text.Length,
+                            WordCount = text.WordCount,
+                            Content = text.Content.Replace("prince", "gnbht", StringComparison.InvariantCultureIgnoreCase),
+                        });
 
-            //    Console.WriteLine($"{doc.Source.Index}: {doc.Source.Content}");
-            //    count += 1;
-            //}
-            //Console.WriteLine($"Total count: {count}");
+                        var result = client.Bulk(bulk => bulk
+                            .Index(IndexName)
+                            .UpdateMany(texts, (descriptor, text) => descriptor.Id(text.Id).Doc(text).DocAsUpsert()));
+                    }
+                    return;
+            }
+        }
+
+        static int Populate(ElasticClient client)
+        {
+            using (var connection = new SqlConnection(DbConnectionString))
+            {
+                var texts = connection.Query<Text>(TextQuery);
+                var result = client.Bulk(bulk => bulk
+                    .Index(IndexName)
+                    .CreateMany(texts, (op, text) => op.Id(text.Id)));
+
+                return result.Items.Count;
+            }
         }
 
         static IEnumerable<IHit<Text>> QueryByContent(ElasticClient client, string content)
@@ -91,6 +128,32 @@ namespace Poppa
                 {
                     yield return hit;
                 }
+            }
+        }
+
+        static Mode GetMode(string[] args)
+        {
+            switch (args.Length)
+            {
+                case 1:
+                    switch (args[0])
+                    {
+                        case "populate": return Mode.Populate;
+                        case "update": return Mode.Update;
+                        default: return Mode.Invalid;
+                    }
+
+                case 2:
+                    if ("query" == args[0])
+                    {
+                        return Mode.Query;
+                    }
+                    else
+                    {
+                        return Mode.Invalid;
+                    }
+
+                default: return Mode.Invalid;
             }
         }
     }
