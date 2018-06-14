@@ -9,6 +9,8 @@ namespace Poppa
 {
     class Program
     {
+        const string IndexName = "text_index";
+
         class Text
         {
             public int Id { get; set; }
@@ -24,42 +26,49 @@ namespace Poppa
             var settings = new ConnectionSettings(serverAddress);
             var client = new ElasticClient(settings);
 
+            // Uncomment to repopulate elasticsearch.
             //using (var connection = new SqlConnection("Server=(LocalDb)\\MSSQLLocalDB;Database=Scratch"))
             //{
             //    var texts = connection.Query<Text>("select * from [Text]");
-            //    var result = client.Bulk(b => b.CreateMany(texts).Index("text_idx"));
+            //    var result = client.Bulk(create => create
+            //        .Index(IndexName)
+            //        .CreateMany(texts, (op, text) => op.Id(text.Id)));
 
             //    Console.WriteLine(result.Items.Count);
             //}
 
-            if (args.Length != 1)
-            {
-                throw new ArgumentException("What do you want to search for?");
-            }
+            // Uncomment to perform a search.
+            //if (args.Length != 1)
+            //{
+            //    throw new ArgumentException("Caller must provide one search term.");
+            //}
 
-            var count = 0;
-            foreach (var doc in QueryByContent(client, args[0]))
-            {
-                Console.WriteLine($"{doc.Index}: {doc.Content}");
-                count += 1;
-            }
-            Console.WriteLine($"Total count: {count}");
+            //var count = 0;
+            //foreach (var doc in QueryByContent(client, args[0]))
+            //{
+            //    if (doc.Id != doc.Source.Id.ToString())
+            //        throw new Exception("Id mismatch");
+
+            //    Console.WriteLine($"{doc.Source.Index}: {doc.Source.Content}");
+            //    count += 1;
+            //}
+            //Console.WriteLine($"Total count: {count}");
         }
 
-        static IEnumerable<Text> QueryByContent(ElasticClient client, string content)
+        static IEnumerable<IHit<Text>> QueryByContent(ElasticClient client, string content)
         {
             var initialResult = client.Search<Text>(s =>
             {
-                return s.Index("text_idx")
+                return s.Index(IndexName)
                     .Skip(0)
                     .Size(100)
                     .Query(q => q.Term(t => t.Content, content));
             });
 
-            Console.WriteLine($"Returning {initialResult.Total} results.")
-            foreach (var doc in initialResult.Hits.Select(hit => hit.Source))
+            Console.WriteLine($"Returning {initialResult.Total} results.");
+            foreach (var hit in initialResult.Hits)
             {
-                yield return doc;
+                yield return hit;
             }
 
             var viewed = 100;
@@ -69,7 +78,7 @@ namespace Poppa
             {
                 var result = client.Search<Text>(s =>
                 {
-                    return s.Index("text_idx")
+                    return s.Index(IndexName)
                         .Skip(viewed)
                         .Size(100)
                         .Query(q => q.Term(t => t.Content, content));
@@ -78,9 +87,9 @@ namespace Poppa
                 viewed += result.Hits.Count;
                 remaining -= result.Hits.Count;
 
-                foreach (var doc in result.Hits.Select(hit => hit.Source))
+                foreach (var hit in result.Hits)
                 {
-                    yield return doc;
+                    yield return hit;
                 }
             }
         }
