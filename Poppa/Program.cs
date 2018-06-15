@@ -12,6 +12,8 @@ namespace Poppa
         const string DbConnectionString = "Server=(LocalDb)\\MSSQLLocalDB;Database=Scratch";
         const string IndexName = "text_index";
         const string TextQuery = "select * from [Text]";
+        const string LeftToken = "2534d2e2-8340-4f67-974e-7dd4564ac1d5";
+        const string RightToken = "65b3860f-e205-44d9-a7e0-aade6db53f30";
 
         class Text
         {
@@ -20,6 +22,7 @@ namespace Poppa
             public int Length { get; set; }
             public int WordCount { get; set; }
             public string Content { get; set; }
+            public string Token { get; set; }
         }
 
         enum Mode
@@ -81,9 +84,22 @@ namespace Poppa
 
         static int Populate(ElasticClient client)
         {
+            Text WithToken(Text text, int idx)
+            {
+                return new Text
+                {
+                    Id = text.Id,
+                    Index = text.Index,
+                    Length = text.Length,
+                    WordCount = text.WordCount,
+                    Content = text.Content,
+                    Token = idx % 2 == 0 ? LeftToken : RightToken,
+                };
+            }
+
             using (var connection = new SqlConnection(DbConnectionString))
             {
-                var texts = connection.Query<Text>(TextQuery);
+                var texts = connection.Query<Text>(TextQuery).Select(WithToken);
                 var result = client.Bulk(bulk => bulk
                     .Index(IndexName)
                     .CreateMany(texts, (op, text) => op.Id(text.Id)));
@@ -99,7 +115,8 @@ namespace Poppa
                 return s.Index(IndexName)
                     .Skip(0)
                     .Size(100)
-                    .Query(q => q.Term(t => t.Content, content));
+                    .Query(q => q.Term(t => t.Content, content))
+                    .Query(q => q.Term(t => t.Token, LeftToken));
             });
 
             Console.WriteLine($"Returning {initialResult.Total} results.");
@@ -118,7 +135,8 @@ namespace Poppa
                     return s.Index(IndexName)
                         .Skip(viewed)
                         .Size(100)
-                        .Query(q => q.Term(t => t.Content, content));
+                        .Query(q => q.Term(t => t.Content, content))
+                        .Query(q => q.Term(t => t.Token, LeftToken));
                 });
 
                 viewed += result.Hits.Count;
