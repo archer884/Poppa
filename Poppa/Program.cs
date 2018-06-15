@@ -39,6 +39,8 @@ namespace Poppa
             var settings = new ConnectionSettings(serverAddress);
             var client = new ElasticClient(settings);
 
+            args = new[] { "query", "prince" };
+
             switch (GetMode(args))
             {
                 case Mode.Invalid:
@@ -110,14 +112,15 @@ namespace Poppa
 
         static IEnumerable<IHit<Text>> QueryByContent(ElasticClient client, string content)
         {
-            var initialResult = client.Search<Text>(s =>
-            {
-                return s.Index(IndexName)
-                    .Skip(0)
-                    .Size(100)
-                    .Query(q => q.Term(t => t.Content, content))
-                    .Query(q => q.Term(t => t.Token, LeftToken));
-            });
+            var initialResult = client.Search<Text>(s => s
+                .Index(IndexName)
+                .Skip(0)
+                .Size(100)
+                .Query(q => q
+                    .Bool(b => b
+                        .Must(mu => mu.Match(m => m.Field(x => x.Token).Query(LeftToken)))
+                        .Filter(fi => fi.Match(m => m.Field(x => x.Content).Query(content)))
+            )));
 
             Console.WriteLine($"Returning {initialResult.Total} results.");
             foreach (var hit in initialResult.Hits)
@@ -130,14 +133,15 @@ namespace Poppa
 
             while (remaining > 0)
             {
-                var result = client.Search<Text>(s =>
-                {
-                    return s.Index(IndexName)
-                        .Skip(viewed)
-                        .Size(100)
-                        .Query(q => q.Term(t => t.Content, content))
-                        .Query(q => q.Term(t => t.Token, LeftToken));
-                });
+                var result = client.Search<Text>(s => s
+                    .Index(IndexName)
+                    .Skip(viewed)
+                    .Size(100)
+                    .Query(q => q
+                        .Bool(b => b
+                            .Must(mu => mu.Match(m => m.Field(x => x.Token).Query(LeftToken)))
+                            .Filter(fi => fi.Match(m => m.Field(x => x.Content).Query(content)))
+                )));
 
                 viewed += result.Hits.Count;
                 remaining -= result.Hits.Count;
